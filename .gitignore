@@ -20,6 +20,7 @@ dist/
 # Local implementation notes
 plans/
 UJs.md
+scripts/start-ku-tunnel.ps1
 
 # IDEs and OS files
 .idea/

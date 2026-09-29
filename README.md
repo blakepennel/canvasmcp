@@ -27,6 +27,17 @@ canvas auth-status
 
 If that fails: `canvas settings profiles`, `canvas settings choose-profile`, or `export CANVAS_BASE_URL=https://school.instructure.com`. On macOS, approve Keychain prompts. Then `canvas courses --all --limit 5`.
 
+Firefox is available as an opt-in cookie source when Chrome cannot be read.
+Log into Canvas in Firefox and set `CANVAS_COOKIE_BROWSER=firefox`
+and `CANVAS_BASE_URL=https://school.instructure.com` in the process environment. Chrome
+remains the default. Both modes use the existing Canvas session cookies.
+
+Alternatively, supply both `CANVAS_SESSION_COOKIE` and `CANVAS_CSRF_TOKEN`
+alongside `CANVAS_BASE_URL` in the process environment. These override browser
+cookie lookup. Treat them as credentials: do not put values in source files,
+committed configuration, shell history, or chat. Unset both cookie variables
+to return to the selected browser's session.
+
 ## CLI
 
 ```bash
@@ -72,3 +83,11 @@ canvas-mcp --transport http --host 127.0.0.1 --port 8000
   }
 }
 ```
+
+The MCP server exposes `download_course_file` for the existing local-file
+download workflow. It also exposes `read_course_file`, which returns the file
+as an MCP embedded binary resource so compatible chat clients can inspect it
+inline. Inline reads default to a 25 MB limit (maximum 50 MB); larger files
+should use `download_course_file`.
+Attachment display depends on the MCP client; this does not guarantee a native
+chat attachment. This tool returns an embedded resource, not a ResourceLink.
