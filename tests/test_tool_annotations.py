@@ -12,16 +12,24 @@ def _tools():
     return asyncio.run(mcp.list_tools())
 
 
+def _hints(tool):
+    # Newer MCP SDKs renamed readOnlyHint/destructiveHint to snake_case and deprecate the old names.
+    hints = tool.annotations
+    assert hints is not None, tool.name
+    if hasattr(type(hints), "read_only_hint") or "read_only_hint" in getattr(type(hints), "model_fields", {}):
+        return hints.read_only_hint, hints.destructive_hint
+    return hints.readOnlyHint, hints.destructiveHint
+
+
 def test_only_canvas_writes_need_approval():
     tools = _tools()
     assert len(tools) > 30
     for tool in tools:
-        hints = tool.annotations
-        assert hints is not None, tool.name
+        read_only, destructive = _hints(tool)
         if tool.name in WRITE_TOOLS:
-            assert hints.readOnlyHint is False and hints.destructiveHint is True, tool.name
+            assert read_only is False and destructive is True, tool.name
         else:
-            assert hints.readOnlyHint is True and hints.destructiveHint is False, tool.name
+            assert read_only is True and destructive is False, tool.name
 
 
 def test_every_write_tool_exists():
