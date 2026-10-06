@@ -100,6 +100,23 @@ class TestListInboxConversationsTool:
         assert mock_client.list_conversations.call_args.kwargs["course_id"] == "123"
 
 
+def test_sent_conversations_fall_back_to_your_last_message(mock_client):
+    from tools import list_inbox_conversations
+
+    mock_client.list_conversations.return_value = [
+        {
+            "id": 8,
+            "last_message": None,
+            "last_message_at": None,
+            "last_authored_message": "Can I come to office hours?",
+            "last_authored_message_at": "2026-10-04T09:00:00Z",
+        }
+    ]
+    conversation = list_inbox_conversations({"scope": "sent"})["conversations"][0]
+    assert conversation["last_message_preview"] == "Can I come to office hours?"
+    assert conversation["last_message_at"] == "2026-10-04T09:00:00Z"
+
+
 class TestGetInboxConversationTool:
     def test_requires_a_numeric_id(self, mock_client):
         from tools import get_inbox_conversation
@@ -142,6 +159,59 @@ class TestGetInboxConversationTool:
             {"id": "99", "display_name": "review.pdf", "content_type": "application/pdf", "size": 1234}
         ]
         assert "SECRET" not in repr(result)
+
+
+def test_long_message_bodies_say_they_were_truncated(mock_client):
+    from tools import get_inbox_conversation
+    from tools.common import DEFAULT_HTML_CHAR_LIMIT
+
+    mock_client.get_conversation.return_value = {
+        "id": 7,
+        "participants": [],
+        "messages": [
+            {"id": 1, "author_id": 1, "body": "a" * (DEFAULT_HTML_CHAR_LIMIT + 1)},
+            {"id": 2, "author_id": 1, "body": "short"},
+        ],
+    }
+    long, short = get_inbox_conversation({"conversation_id": "7"})["messages"]
+    assert long["body_truncated"] is True and len(long["body"]) == DEFAULT_HTML_CHAR_LIMIT
+    assert short["body_truncated"] is False
+
+
+@pytest.mark.parametrize(("status", "code"), [(404, "not_found"), (401, "forbidden"), (500, "canvas_api_error")])
+def test_canvas_errors_become_tool_errors(mock_client, status, code):
+    from auth import CanvasAPIError
+    from specs.registry import dispatch_tool_call
+
+    mock_client.get_conversation.side_effect = CanvasAPIError("nope", status_code=status)
+    mock_client.list_conversations.side_effect = CanvasAPIError("nope", status_code=status)
+    assert dispatch_tool_call("get_inbox_conversation", {"conversation_id": "7"})["error"] == code
+    assert dispatch_tool_call("list_inbox_conversations", {})["error"] == code
+
+
+@pytest.mark.parametrize(
+    ("argv", "tool", "args"),
+    [
+        (["inbox", "list"], "list_inbox_conversations", {"scope": "inbox", "course_id": None, "limit": 50}),
+        (
+            ["inbox", "list", "--scope", "unread", "--course", "123", "--limit", "5"],
+            "list_inbox_conversations",
+            {"scope": "unread", "course_id": "123", "limit": 5},
+        ),
+        (["inbox", "show", "42"], "get_inbox_conversation", {"conversation_id": "42"}),
+    ],
+)
+def test_cli_inbox_commands(monkeypatch, argv, tool, args):
+    from typer.testing import CliRunner
+
+    from cli import app, bootstrap
+
+    calls = []
+    monkeypatch.setattr(bootstrap, "_ensure_auth", lambda: None)
+    monkeypatch.setattr(bootstrap, "dispatch_tool_call", lambda name, a: calls.append((name, a)) or {"ok": True})
+    result = CliRunner().invoke(app, ["--output", "json", *argv])
+    assert result.exit_code == 0, result.output
+    assert calls == [(tool, args)]
 
 
 def test_inbox_tools_are_registered_read_only():

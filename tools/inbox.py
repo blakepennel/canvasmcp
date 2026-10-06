@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from tools.common import (
+    DEFAULT_HTML_CHAR_LIMIT,
     canvas_client,
     clamp,
     invalid_argument,
@@ -71,8 +72,11 @@ def _map_conversation_summary(item: dict[str, Any]) -> dict[str, Any]:
         "subject": item.get("subject"),
         "workflow_state": item.get("workflow_state"),
         "starred": bool(item.get("starred", False)),
-        "last_message_at": item.get("last_message_at"),
-        "last_message_preview": truncate_html(item.get("last_message"), limit=PREVIEW_CHAR_LIMIT),
+        # In the sent view Canvas leaves last_message empty until someone replies; yours is last_authored_message.
+        "last_message_at": item.get("last_message_at") or item.get("last_authored_message_at"),
+        "last_message_preview": truncate_html(
+            item.get("last_message") or item.get("last_authored_message"), limit=PREVIEW_CHAR_LIMIT
+        ),
         "message_count": item.get("message_count"),
         "context_name": item.get("context_name"),
         "participants": [
@@ -85,12 +89,14 @@ def _map_conversation_summary(item: dict[str, Any]) -> dict[str, Any]:
 
 def _map_message(message: dict[str, Any], names: dict[str, str]) -> dict[str, Any]:
     author_id = str(message.get("author_id", ""))
+    body = message.get("body")
     return {
         "id": str(message.get("id", "")),
         "created_at": message.get("created_at"),
         "author_id": author_id,
         "author": names.get(author_id),
-        "body": truncate_html(message.get("body")),
+        "body": truncate_html(body),
+        "body_truncated": len(body or "") > DEFAULT_HTML_CHAR_LIMIT,
         "generated": bool(message.get("generated", False)),
         # Names and IDs only: Canvas attachment URLs embed an access key.
         "attachments": [
