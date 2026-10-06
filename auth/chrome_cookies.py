@@ -212,17 +212,25 @@ def read_chrome_cookies(
     *,
     profile_path: str | None = None,
 ) -> tuple[str, str] | None:
-    grouped = _iter_canvas_cookies(_chrome_cookies(profile_path=profile_path))
-    complete_domains = _domains_with_complete_canvas_session(grouped)
-
     if base_url:
         domain_name = _domain_from_base_url(base_url)
-        matches = _matching_domains(domain_name, complete_domains)
-        if matches:
-            values = grouped[matches[0]]
-            return values["canvas_session"], values["_csrf_token"]
+        search_domains = [domain_name]
+        if "." in domain_name:
+            search_domains.append(domain_name.split(".", 1)[1])
+        for search_domain in search_domains:
+            grouped = _iter_canvas_cookies(
+                _chrome_cookies(domain_name=search_domain, profile_path=profile_path)
+            )
+            matches = _matching_domains(
+                domain_name, _domains_with_complete_canvas_session(grouped)
+            )
+            if matches:
+                values = grouped[matches[0]]
+                return values["canvas_session"], values["_csrf_token"]
         return None
 
+    grouped = _iter_canvas_cookies(_chrome_cookies(profile_path=profile_path))
+    complete_domains = _domains_with_complete_canvas_session(grouped)
     candidates = _prefer_specific_domains(complete_domains)
     if len(candidates) != 1:
         return None
