@@ -83,3 +83,11 @@ canvas-mcp --transport http --host 127.0.0.1 --port 8000
   }
 }
 ```
+
+The MCP server exposes `download_course_file` for the existing local-file
+download workflow. It also exposes `read_course_file`, which returns the file
+as an MCP embedded binary resource so compatible chat clients can inspect it
+inline. Inline reads default to a 25 MB limit (maximum 50 MB); larger files
+should use `download_course_file`.
+Attachment display depends on the MCP client; this does not guarantee a native
+chat attachment. This tool returns an embedded resource, not a ResourceLink.

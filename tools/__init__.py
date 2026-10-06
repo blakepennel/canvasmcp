@@ -20,6 +20,7 @@ from tools.files import (
     list_course_files,
     list_course_folders,
     list_modules,
+    read_course_file,
 )
 from tools.grades import get_course_grade_summary
 from tools.misc import (
@@ -75,4 +76,5 @@ __all__ = [
     "preview_assignment_submission",
     "resolve_canvas_url",
     "resolve_course",
+    "read_course_file",
 ]
