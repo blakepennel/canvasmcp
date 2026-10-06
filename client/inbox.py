@@ -6,11 +6,7 @@ from canvasapi import Canvas
 from canvasapi.util import combine_kwargs
 
 from .base import MAX_PER_PAGE
-
-
-class _CanvasDictItem:
-    def __init__(self, _: Any, attributes: dict[str, Any]) -> None:
-        self.__dict__.update(attributes)
+from .content import _CanvasDictItem
 
 
 class CanvasInboxMixin:
