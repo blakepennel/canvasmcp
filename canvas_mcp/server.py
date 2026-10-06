@@ -51,6 +51,14 @@ def _signature_for_spec(spec: ToolSpec) -> Signature:
     return Signature(parameters=parameters, return_annotation=dict[str, Any])
 
 
+def _tool_annotations(spec: ToolSpec) -> dict[str, bool]:
+    # Read-only tools run without an approval prompt in clients like ChatGPT; anything that
+    # changes Canvas (submitting, cancelling and deleting uploads) still asks every time.
+    if spec.read_only:
+        return {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False}
+    return {"readOnlyHint": False, "destructiveHint": True, "openWorldHint": True}
+
+
 def _register_tool(spec: ToolSpec) -> None:
     def _tool(**kwargs: Any) -> dict[str, Any]:
         args = {key: value for key, value in kwargs.items() if value is not None}
@@ -66,7 +74,7 @@ def _register_tool(spec: ToolSpec) -> None:
     _tool.__doc__ = spec.description
     _tool.__signature__ = signature
     _tool.__annotations__ = annotations
-    mcp.tool(_tool, name=spec.name, description=spec.description)
+    mcp.tool(_tool, name=spec.name, description=spec.description, annotations=_tool_annotations(spec))
 
 
 for tool_spec in TOOL_SPECS:
