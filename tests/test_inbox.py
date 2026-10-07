@@ -86,7 +86,7 @@ class TestListInboxConversationsTool:
                 "last_message": "x" * 1000,
                 "last_message_at": "2026-10-05T14:00:00Z",
                 "message_count": 2,
-                "context_name": "EECS 678",
+                "context_name": "MATH101",
                 "participants": [{"id": 1, "name": "Prof"}, {"id": 2, "full_name": "Student A"}],
                 "properties": ["attachments"],
             }
