@@ -18,6 +18,7 @@ def mock_client():
         mock.patch("tools.inbox.canvas_client", return_value=client),
         mock.patch("tools.misc.canvas_client", return_value=client),
         mock.patch("tools.submissions.canvas_client", return_value=client),
+        mock.patch("tools.quizzes.canvas_client", return_value=client),
     ]
     for patch in patches:
         patch.start()

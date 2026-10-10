@@ -16,6 +16,8 @@ from cli.files import files_app
 from cli.files import register as register_files
 from cli.inbox import inbox_app
 from cli.inbox import register as register_inbox
+from cli.quizzes import quizzes_app
+from cli.quizzes import register as register_quizzes
 from cli.misc import register as register_misc
 from cli.misc import tool_app as cli_tool_app
 from cli.output import OutputMode, emit, fail
@@ -33,6 +35,7 @@ app.add_typer(assignments_app, name="assignments")
 app.add_typer(discussion_app, name="discussion")
 app.add_typer(files_app, name="files")
 app.add_typer(inbox_app, name="inbox")
+app.add_typer(quizzes_app, name="quizzes")
 app.add_typer(cli_tool_app, name="tool")
 app.add_typer(settings_app, name="settings")
 app.add_typer(scheduled_app, name="scheduled")
@@ -86,6 +89,7 @@ register_assignments(_invoke)
 register_discussions(_invoke)
 register_files(_invoke)
 register_inbox(_invoke)
+register_quizzes(_invoke)
 register_misc(
     app,
     invoke=_invoke,
