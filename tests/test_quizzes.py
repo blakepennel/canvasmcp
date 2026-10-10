@@ -248,6 +248,18 @@ class TestGetQuizResults:
         mock_client.get_quiz.assert_not_called()
 
 
+def test_instructions_in_list_and_results(mock_client):
+    from tools import get_quiz_results, list_course_quizzes
+
+    _finished(mock_client)
+    mock_client.get_quiz.return_value["description"] = "<p>Chapters 1-3. Notes allowed.</p>"
+    assert get_quiz_results({"course_id": "5", "quiz_id": "10"})["instructions"] == "<p>Chapters 1-3. Notes allowed.</p>"
+    mock_client.list_quizzes.return_value = [{**QUIZ, "description": "<p>Notes allowed.</p>"}, QUIZ]
+    mock_client.list_assignments.return_value = []
+    with_text, without = list_course_quizzes({"course_id": "5"})["quizzes"]
+    assert with_text["instructions"] == "<p>Notes allowed.</p>" and without["instructions"] is None
+
+
 def test_canvas_errors_become_tool_errors(mock_client):
     from auth import CanvasAPIError
     from specs.registry import dispatch_tool_call

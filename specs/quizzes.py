@@ -10,7 +10,8 @@ QUIZ_TOOL_SPECS: list[ToolSpec] = [
         description=(
             "List a course's quizzes with their settings and your status: type, points, question count, time "
             "limit, attempts allowed and left, unlock, due, and lock dates, lockdown or access-code requirements, "
-            "and your score. Includes New Quizzes (dates, points, and score only). Never opens or starts a quiz."
+            "your score, and the quiz instructions. Includes New Quizzes (dates, points, and score only). "
+            "Never opens or starts a quiz."
         ),
         handler=list_course_quizzes,
         properties={

@@ -183,7 +183,7 @@ Both are read-only and never open, start, or resume an attempt. Starting a quiz 
 to open or take one from the CLI.
 
 - `list` shows each quiz's time limit, attempts allowed and left, unlock, due, and lock dates, lockdown or access-code
-  requirements, and your score. New Quizzes show dates, points, and score only.
+  requirements, your score, and the quiz instructions. New Quizzes show dates, points, and score only.
 - `results` reads one finished attempt: each question, your answer, whether it was right, points, and the correct
   answer when the quiz shows it. It reads nothing while an attempt is in progress.
 

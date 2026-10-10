@@ -63,6 +63,7 @@ def _classic_summary(quiz: dict[str, Any], submission: dict[str, Any] | None) ->
         "assignment_id": str(quiz["assignment_id"]) if quiz.get("assignment_id") else None,
         "title": quiz.get("title"),
         "type": QUIZ_TYPES.get(quiz.get("quiz_type"), quiz.get("quiz_type")),
+        "instructions": truncate_html(quiz.get("description"), limit=1000) or None,
         "points_possible": quiz.get("points_possible"),
         "question_count": quiz.get("question_count"),
         "time_limit_minutes": quiz.get("time_limit"),
@@ -246,6 +247,7 @@ def get_quiz_results(args: dict[str, Any]) -> dict[str, Any]:
         "time_limit_minutes": quiz.get("time_limit"),
         "allowed_attempts": quiz.get("allowed_attempts"),
         "scoring_policy": quiz.get("scoring_policy"),
+        "instructions": truncate_html(quiz.get("description"), limit=QUESTION_CHAR_LIMIT) or None,
         "note": SAFETY_NOTE,
     }
 
