@@ -31,6 +31,8 @@ See the [README](../README.md) for install, auth, and the usual flow. `canvas --
 | `canvas course page COURSE SLUG_OR_ID` | `canvas_get_page` |
 | `canvas course tabs ID` | `list_course_tabs` |
 | `canvas course tab COURSE TAB` | `get_course_tab` |
+| `canvas quizzes list ID` | `list_course_quizzes` |
+| `canvas quizzes results COURSE QUIZ [--attempt N]` | `get_quiz_results` |
 | `canvas files list ID` | `list_course_files` |
 | `canvas files download COURSE FILE` | `download_course_file` |
 | `canvas files folders ID` | `list_course_folders` |
@@ -39,4 +41,4 @@ See the [README](../README.md) for install, auth, and the usual flow. `canvas --
 | `canvas course people ID` | `list_course_people` |
 | `canvas url URL` | `resolve_canvas_url` |
 
-`canvas_get_page` is wiki pages only. Use `canvas url` when the link type is unknown. Non-self submission queries need extra Canvas permissions.
+The quiz commands are read-only: they never open, start, or resume an attempt, and `results` only reads finished attempts. `canvas_get_page` is wiki pages only. Use `canvas url` when the link type is unknown. Non-self submission queries need extra Canvas permissions.

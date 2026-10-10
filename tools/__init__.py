@@ -30,6 +30,7 @@ from tools.misc import (
     list_todo_items,
     resolve_canvas_url,
 )
+from tools.quizzes import get_quiz_results, list_course_quizzes
 from tools.submissions import (
     install_assignment_submission_files,
     list_course_submissions,
@@ -43,6 +44,8 @@ from tools.submit import (
 )
 
 __all__ = [
+    "get_quiz_results",
+    "list_course_quizzes",
     "cancel_scheduled_submission",
     "canvas_get_page",
     "confirm_assignment_submission",
