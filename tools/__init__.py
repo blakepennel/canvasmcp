@@ -30,6 +30,13 @@ from tools.misc import (
     list_todo_items,
     resolve_canvas_url,
 )
+from tools.planner import (
+    create_todo_note,
+    delete_todo_note,
+    list_planner_items,
+    set_todo_item_state,
+    update_todo_note,
+)
 from tools.submissions import (
     install_assignment_submission_files,
     list_course_submissions,
@@ -43,6 +50,11 @@ from tools.submit import (
 )
 
 __all__ = [
+    "create_todo_note",
+    "delete_todo_note",
+    "list_planner_items",
+    "set_todo_item_state",
+    "update_todo_note",
     "cancel_scheduled_submission",
     "canvas_get_page",
     "confirm_assignment_submission",

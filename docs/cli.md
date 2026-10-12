@@ -36,7 +36,12 @@ See the [README](../README.md) for install, auth, and the usual flow. `canvas --
 | `canvas files folders ID` | `list_course_folders` |
 | `canvas announcements --course ID` | `list_announcements` |
 | `canvas todo` | `list_todo_items` |
+| `canvas planner items [--start DATE] [--end DATE] [--incomplete]` | `list_planner_items` |
+| `canvas planner add TITLE [--date DATE] [--details TEXT] [--course ID]` | `create_todo_note` |
+| `canvas planner edit NOTE [--title TEXT] [--date DATE] [--details TEXT] [--course ID]` | `update_todo_note` |
+| `canvas planner delete NOTE` | `delete_todo_note` |
+| `canvas planner done TYPE ID [--undo]` | `set_todo_item_state` |
 | `canvas course people ID` | `list_course_people` |
 | `canvas url URL` | `resolve_canvas_url` |
 
-`canvas_get_page` is wiki pages only. Use `canvas url` when the link type is unknown. Non-self submission queries need extra Canvas permissions.
+The planner commands only change your own To Do list: personal notes and the done or dismissed state of items. They never submit anything. `canvas_get_page` is wiki pages only. Use `canvas url` when the link type is unknown. Non-self submission queries need extra Canvas permissions.
