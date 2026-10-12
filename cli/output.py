@@ -28,6 +28,7 @@ FIELD_ORDER = {
     "assignments": "id name due_at points_possible submission",
     "quizzes": "kind quiz_id title type due_at time_limit_minutes allowed_attempts your_status",
     "questions": "position type question your_answer result points correct_answers",
+    "items": "plannable_type plannable_id title date context_name done dismissed submitted",
     "assignment": "id name due_at lock_at points_possible submission description rubric",
     "jobs": "id status assignment_name course_id assignment_id submit_at filenames error",
     "files": "id display_name filename local_path path size error",

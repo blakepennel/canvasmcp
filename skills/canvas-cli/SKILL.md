@@ -1,6 +1,6 @@
 ---
 name: canvas-cli
-description: Use the local `canvas` CLI for Canvas LMS workflows. Trigger when you need to find a course, inspect modules/assignments/discussions/files/pages/people/grades/rubrics/quizzes/inbox messages, submit or schedule an assignment, or verify Canvas session status from the terminal.
+description: Use the local `canvas` CLI for Canvas LMS workflows. Trigger when you need to find a course, inspect modules/assignments/discussions/files/pages/people/grades/rubrics/quizzes/inbox messages, manage the To Do list, submit or schedule an assignment, or verify Canvas session status from the terminal.
 ---
 
 # Canvas CLI Agent Instructions
@@ -186,6 +186,22 @@ to open or take one from the CLI.
   requirements, your score, and the quiz instructions. New Quizzes show dates, points, and score only.
 - `results` reads one finished attempt: each question, your answer, whether it was right, points, and the correct
   answer when the quiz shows it. It reads nothing while an attempt is in progress.
+
+## To Do List
+
+```bash
+canvas planner items --start 2026-10-01 --end 2026-10-31 --incomplete
+canvas planner add "Read chapter 3" --date 2026-10-12 --course <course_id>
+canvas planner edit <note_id> --date 2026-10-14
+canvas planner delete <note_id>
+canvas planner done assignment <assignment_id>
+canvas planner done assignment <assignment_id> --undo
+```
+
+- `items` lists the To Do list with each item's `plannable_type`, `plannable_id`, and done or dismissed state.
+- `add`, `edit`, and `delete` manage personal to-do notes, which only you can see.
+- `done` marks any item done or not done, like the Canvas checkbox. It never submits anything.
+- These change Canvas, so confirm with the user before running them.
 
 ## Course Structure
 

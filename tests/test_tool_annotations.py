@@ -5,7 +5,8 @@ import asyncio
 from canvas_mcp.server import mcp
 
 # Tools that change something in Canvas. Chat clients ask before running these; everything else is read-only.
-WRITE_TOOLS = {"confirm_assignment_submission", "cancel_scheduled_submission"}
+WRITE_TOOLS = {"confirm_assignment_submission", "cancel_scheduled_submission", "create_todo_note",
+               "update_todo_note", "delete_todo_note", "set_todo_item_state"}
 
 
 def _tools():

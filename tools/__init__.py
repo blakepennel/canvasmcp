@@ -33,6 +33,13 @@ from tools.misc import (
     resolve_canvas_url,
 )
 from tools.quizzes import get_quiz_results, list_course_quizzes
+from tools.planner import (
+    create_todo_note,
+    delete_todo_note,
+    list_planner_items,
+    set_todo_item_state,
+    update_todo_note,
+)
 from tools.submissions import (
     install_assignment_submission_files,
     list_course_submissions,
@@ -48,6 +55,11 @@ from tools.submit import (
 __all__ = [
     "get_quiz_results",
     "list_course_quizzes",
+    "create_todo_note",
+    "delete_todo_note",
+    "list_planner_items",
+    "set_todo_item_state",
+    "update_todo_note",
     "cancel_scheduled_submission",
     "canvas_get_page",
     "confirm_assignment_submission",

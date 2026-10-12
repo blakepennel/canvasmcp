@@ -9,6 +9,7 @@ from specs.core import CORE_TOOL_SPECS
 from specs.courses import COURSE_TOOL_SPECS
 from specs.inbox import INBOX_TOOL_SPECS
 from specs.quizzes import QUIZ_TOOL_SPECS
+from specs.planner import PLANNER_TOOL_SPECS
 from specs.schema import ToolSpec
 from tools.common import canvas_api_tool_error, tool_error
 
@@ -19,6 +20,7 @@ TOOL_SPECS: list[ToolSpec] = [
     *CONTENT_TOOL_SPECS,
     *INBOX_TOOL_SPECS,
     *QUIZ_TOOL_SPECS,
+    *PLANNER_TOOL_SPECS,
 ]
 
 _SPEC_MAP: dict[str, ToolSpec] = {spec.name: spec for spec in TOOL_SPECS}
