@@ -114,17 +114,25 @@ def list_course_quizzes(args: dict[str, Any]) -> dict[str, Any]:
     client = canvas_client()
     limit = clamp(args.get("limit"), 100)
     notes = [SAFETY_NOTE]
+    hidden = False
     try:
         quizzes = client.list_quizzes(course_id=course_id, limit=limit)
     except CanvasAPIError as exc:
         if exc.status_code != 404:
             raise
-        quizzes = []   # the course hides its Quizzes page from students; New Quizzes still show up below
-        notes.append("This course's Quizzes page is hidden from students, so only New Quizzes are listed.")
+        quizzes, hidden = [], True   # the course hides its Quizzes page from students
     assignments = client.list_assignments(
         course_id=course_id, include_submission=True, include_discussion_topic=False, limit=300
     )
     by_id = {str(a.get("id")): a for a in assignments}
+    if hidden:
+        # Each Classic Quiz is also an assignment (submission type online_quiz) that names its quiz_id, and the quiz
+        # itself can still be read even though its list page is hidden.
+        quiz_ids = [str(a["quiz_id"]) for a in assignments
+                    if a.get("quiz_id") and "online_quiz" in (a.get("submission_types") or [])][:limit]
+        quizzes = [client.get_quiz(course_id=course_id, quiz_id=qid) for qid in quiz_ids]
+        notes.append("This course hides its Quizzes page from students, so its Classic Quizzes were found through "
+                     "their assignments.")
     items = [
         _classic_summary(q, (by_id.get(str(q.get("assignment_id"))) or {}).get("submission"))
         for q in quizzes
