@@ -118,9 +118,10 @@ def list_course_quizzes(args: dict[str, Any]) -> dict[str, Any]:
     try:
         quizzes = client.list_quizzes(course_id=course_id, limit=limit)
     except CanvasAPIError as exc:
-        if exc.status_code != 404:
+        # Canvas answers 404 for a Quizzes page hidden from students; some setups answer 401 or 403 instead
+        if exc.status_code not in (401, 403, 404):
             raise
-        quizzes, hidden = [], True   # the course hides its Quizzes page from students
+        quizzes, hidden = [], True
     assignments = client.list_assignments(
         course_id=course_id, include_submission=True, include_discussion_topic=False, limit=300
     )
@@ -130,9 +131,18 @@ def list_course_quizzes(args: dict[str, Any]) -> dict[str, Any]:
         # itself can still be read even though its list page is hidden.
         quiz_ids = [str(a["quiz_id"]) for a in assignments
                     if a.get("quiz_id") and "online_quiz" in (a.get("submission_types") or [])][:limit]
-        quizzes = [client.get_quiz(course_id=course_id, quiz_id=qid) for qid in quiz_ids]
+        unreadable = []
+        for qid in quiz_ids:
+            try:
+                quizzes.append(client.get_quiz(course_id=course_id, quiz_id=qid))
+            except CanvasAPIError as exc:   # one restricted or unpublished quiz shouldn't hide the rest
+                if exc.status_code not in (401, 403, 404):
+                    raise
+                unreadable.append(qid)
         notes.append("This course hides its Quizzes page from students, so its Classic Quizzes were found through "
                      "their assignments.")
+        if unreadable:
+            notes.append(f"Canvas wouldn't show {len(unreadable)} of them (quiz IDs {', '.join(unreadable)}).")
     items = [
         _classic_summary(q, (by_id.get(str(q.get("assignment_id"))) or {}).get("submission"))
         for q in quizzes
