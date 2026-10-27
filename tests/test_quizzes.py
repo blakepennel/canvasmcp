@@ -120,6 +120,25 @@ class TestListCourseQuizzes:
         mock_client.list_assignments.return_value = [{"id": 200, "name": "NQ", "is_quiz_lti_assignment": True}]
         result = list_course_quizzes({"course_id": "5"})
         assert [q["kind"] for q in result["quizzes"]] == ["new_quiz"]
+        mock_client.get_quiz.assert_not_called()
+
+    def test_hidden_quizzes_page_finds_classic_quizzes_through_assignments(self, mock_client):
+        from auth import CanvasAPIError
+        from tools import list_course_quizzes
+
+        mock_client.list_quizzes.side_effect = CanvasAPIError("hidden", status_code=404)
+        mock_client.list_assignments.return_value = [
+            {"id": 100, "name": "Lab 5 - Quiz", "quiz_id": 10, "submission_types": ["online_quiz"],
+             "submission": {"workflow_state": "graded", "score": 10, "attempt": 1}},
+            {"id": 101, "name": "Lab 5", "submission_types": ["online_upload"]},
+        ]
+        mock_client.get_quiz.return_value = QUIZ
+        result = list_course_quizzes({"course_id": "5"})
+        (quiz,) = result["quizzes"]
+        assert quiz["kind"] == "classic_quiz" and quiz["quiz_id"] == "10"
+        assert quiz["your_status"]["score"] == 10 and quiz["time_limit_minutes"] == 10
+        mock_client.get_quiz.assert_called_once_with(course_id="5", quiz_id="10")
+        assert any("found through" in n for n in result["notes"])
 
     def test_rejects_bad_course_id(self, mock_client):
         from tools import list_course_quizzes
