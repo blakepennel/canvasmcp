@@ -140,6 +140,29 @@ class TestListCourseQuizzes:
         mock_client.get_quiz.assert_called_once_with(course_id="5", quiz_id="10")
         assert any("found through" in n for n in result["notes"])
 
+    @pytest.mark.parametrize("status", [401, 403, 404])
+    def test_hidden_page_status_codes_and_unreadable_quizzes(self, mock_client, status):
+        from auth import CanvasAPIError
+        from tools import list_course_quizzes
+
+        mock_client.list_quizzes.side_effect = CanvasAPIError("hidden", status_code=status)
+        mock_client.list_assignments.return_value = [
+            {"id": 100, "quiz_id": 10, "submission_types": ["online_quiz"]},
+            {"id": 101, "quiz_id": 11, "submission_types": ["online_quiz"]},
+        ]
+        mock_client.get_quiz.side_effect = [CanvasAPIError("locked", status_code=403), QUIZ]
+        result = list_course_quizzes({"course_id": "5"})
+        assert [q["quiz_id"] for q in result["quizzes"]] == ["10"]   # QUIZ's own id; the unreadable one is skipped
+        assert any("wouldn't show 1" in n and "10" in n for n in result["notes"])
+
+    def test_other_errors_still_surface(self, mock_client):
+        from auth import CanvasAPIError
+        from tools import list_course_quizzes
+
+        mock_client.list_quizzes.side_effect = CanvasAPIError("down", status_code=500)
+        with pytest.raises(CanvasAPIError):
+            list_course_quizzes({"course_id": "5"})
+
     def test_rejects_bad_course_id(self, mock_client):
         from tools import list_course_quizzes
 
