@@ -56,6 +56,22 @@ def test_read_course_file_reports_oversize(mock_client, metadata, message):
         read_course_file("12", "34", max_size_mb=1)
 
 
+@pytest.mark.parametrize(
+    ("ceiling", "requested", "expected_mb"),
+    [(None, 40, 40), ("7", 40, 7), ("7", None, 7), ("7", 3, 3), ("0", 40, 1), ("nonsense", 40, 40), ("99", 60, 50)],
+)
+def test_read_course_file_respects_the_inline_ceiling(mock_client, monkeypatch, ceiling, requested, expected_mb):
+    if ceiling is None:
+        monkeypatch.delenv("CANVAS_MCP_MAX_INLINE_MB", raising=False)
+    else:
+        monkeypatch.setenv("CANVAS_MCP_MAX_INLINE_MB", ceiling)
+    mock_client.read_file_bytes.return_value = ({"size": 10**9}, None)
+
+    with pytest.raises(ValueError, match=f"above the {expected_mb} MB inline limit"):
+        read_course_file("12", "34", max_size_mb=requested)
+    assert mock_client.read_file_bytes.call_args.kwargs["max_bytes"] == expected_mb * 1024 * 1024
+
+
 def _client_with_file(size, response):
     from client import CanvasClient
 
