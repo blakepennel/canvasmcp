@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import os
 from typing import Any
 from urllib.parse import quote
 
@@ -91,6 +92,18 @@ def download_course_file(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _inline_ceiling_mb() -> int:
+    """The largest file read_course_file sends inline: 50 MB, or less where CANVAS_MCP_MAX_INLINE_MB says so.
+
+    Some MCP transports cap message size (ChatGPT's tunnel rejects anything over 10 MB, and base64 makes a file
+    a third bigger), and an oversized response there drops the whole connection rather than failing one call.
+    """
+    try:
+        return max(1, min(int(os.environ.get("CANVAS_MCP_MAX_INLINE_MB", "50")), 50))
+    except ValueError:
+        return 50
+
+
 def read_course_file(
     course_id: str,
     file_id: str,
@@ -105,9 +118,9 @@ def read_course_file(
         raise ValueError("file_id is required")
 
     try:
-        max_size_mb = max(1, min(int(max_size_mb), 50))
+        max_size_mb = max(1, min(int(max_size_mb), _inline_ceiling_mb()))
     except (TypeError, ValueError):
-        max_size_mb = 25
+        max_size_mb = min(25, _inline_ceiling_mb())
     max_bytes = max_size_mb * 1024 * 1024
     file_info, data = canvas_client().read_file_bytes(
         course_id=course_id, file_id=file_id, max_bytes=max_bytes
