@@ -126,6 +126,24 @@ class CanvasContentMixin:
 
         return self._call_canvas(_load, f"read file {file_id} for course {course_id}")
 
+    def list_media_tracks(self, *, file_id: str) -> list[dict[str, Any]]:
+        """Caption and subtitle tracks Canvas has for a video or audio file, with their text; [] when it has none."""
+
+        def _load(canvas: Canvas) -> list[dict[str, Any]]:
+            requester = getattr(canvas, "_Canvas__requester")
+            response = requester.request(
+                "GET", f"media_attachments/{file_id}/media_tracks", _kwargs=[("include[]", "content")]
+            )
+            tracks = response.json()
+            return [dict(t) for t in tracks if isinstance(t, dict)] if isinstance(tracks, list) else []
+
+        try:
+            return self._call_canvas(_load, f"list captions for file {file_id}")
+        except CanvasAPIError as exc:
+            if exc.status_code in (401, 403, 404):
+                return []
+            raise
+
     def list_folders(self, *, course_id: str, limit: int = 150) -> list[dict[str, Any]]:
         def _load(canvas: Canvas) -> list[dict[str, Any]]:
             folders = canvas.get_course(course_id).get_folders(per_page=MAX_PER_PAGE)
