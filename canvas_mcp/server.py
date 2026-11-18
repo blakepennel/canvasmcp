@@ -41,12 +41,14 @@ mcp.tool(
     annotations={"readOnlyHint": True, "destructiveHint": False},
     description=(
         "Return a Canvas course file inline as an MCP embedded binary resource, for the chat model to read. "
-        "A file that fits is sent whole. A PDF, PowerPoint, or text file too big for one response comes in "
-        "parts that keep whole pages, slides, or lines together; the first call returns part 1 and lists the "
-        "rest, and part=N reads another. Videos and audio come with Canvas's captions when it has them, and "
-        "only the captions when the file is too big. text_only=true returns just the text (PDF, PowerPoint, "
-        "Word, text): less preferred, since images, diagrams, and layout are lost, but useful when context is "
-        "limited. For a local copy, use download_course_file."
+        "A file that fits is sent whole. A PDF, PowerPoint, Jupyter notebook, or text/code file too big for one "
+        "response comes in parts that keep whole pages, slides, cells, or lines together; the first call returns "
+        "part 1 and lists the rest, and part=N reads another. An image too big to send comes resized. A zip comes "
+        "with a list of its files (only the list when it's too big). Videos and audio come with Canvas's captions "
+        "when it has them, and only the captions when the file is too big. text_only=true returns just the text "
+        "(PDF, PowerPoint, Word, notebook, text, or the text files in a zip): less preferred, since images, "
+        "diagrams, and layout are lost, but useful when context is limited. For a local copy, use "
+        "download_course_file."
     ),
 )
 

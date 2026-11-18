@@ -14,6 +14,7 @@ dependencies = [
   "canvasapi>=3.4.0",
   "fastmcp>=3.0",
   "jsonschema>=4.0",
+  "pillow>=10.0",
   "pypdf>=6.0",
   "python-pptx>=1.0",
   "requests>=2.31",
