@@ -12,7 +12,7 @@ from tools import file_parts
 
 
 # -- building test files -------------------------------------------------------------------------------
-def make_pdf(page_kb: list[int]) -> bytes:
+def make_pdf(page_kb: list[int], words: str = "") -> bytes:
     """A PDF whose page N carries page_kb[N] KB of incompressible content and the text 'Page N'."""
     from pypdf import PdfWriter
     from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
@@ -26,7 +26,7 @@ def make_pdf(page_kb: list[int]) -> bytes:
         page = writer.add_blank_page(width=200, height=200)
         stream = DecodedStreamObject()
         filler = os.urandom(kb * 512).hex().encode()
-        stream.set_data(b"BT /F1 12 Tf 20 100 Td (Page %d) Tj ET\n%% " % number + filler)
+        stream.set_data(b"BT /F1 12 Tf 20 100 Td (Page %d%s) Tj ET\n%% " % (number, words.encode()) + filler)
         page[NameObject("/Contents")] = writer._add_object(stream)
         page[NameObject("/Resources")] = DictionaryObject(
             {NameObject("/Font"): DictionaryObject({NameObject("/F1"): font})}
@@ -92,8 +92,15 @@ def make_docx(paragraphs: list[str]) -> bytes:
         ("audio/mpeg", "a.mp3", "media"),
         ("text/plain; charset=utf-8", "notes", "text"),
         ("application/octet-stream", "main.py", "text"),
-        ("application/zip", "code.zip", None),
-        ("image/png", "a.png", None),
+        ("application/zip", "code.zip", "archive"),
+        ("application/x-zip-compressed", "x", "archive"),
+        ("application/octet-stream", "lab.ipynb", "notebook"),
+        ("image/png", "a.png", "image"),
+        ("image/svg+xml", "a.svg", None),
+        ("application/vnd.ms-powerpoint", "old.ppt", None),
+        ("application/msword", "old.doc", None),
+        ("text/x-c++src", "a.cpp", "text"),
+        ("application/x-shellscript", "run", "text"),
     ],
 )
 def test_file_kind(content_type, name, kind):
@@ -285,13 +292,27 @@ def test_a_page_too_big_on_its_own_comes_as_text(mock_client, small_mb):
 def test_text_only_is_light_and_says_what_is_lost(mock_client, small_mb):
     from tools.files import read_course_file
 
-    data = make_pdf([5, 5])
+    data = make_pdf([5, 5], words=" covers the stack and the heap")
     _serve(mock_client, data)
     result = read_course_file("1", "2", text_only=True)
     text = _text(result)
-    assert "--- Page 1 ---\nPage 1" in text and "--- Page 2 ---\nPage 2" in text
+    assert "--- Page 1 ---\nPage 1 covers" in text and "--- Page 2 ---\nPage 2 covers" in text
     assert "images, diagrams, equations, and layout are missing" in text
     assert not any(c.type == "resource" for c in result.content)
+
+
+def test_text_only_on_a_text_file_has_no_warning(mock_client, small_mb):
+    from tools.files import read_course_file
+
+    _serve(mock_client, b"int main(void) {}\n", "text/x-csrc", "main.c")
+    text = _text(read_course_file("1", "2", text_only=True))
+    assert "int main(void) {}" in text and "missing" not in text
+
+
+def test_pypdf_repair_warnings_are_quiet():
+    import logging
+
+    assert logging.getLogger("pypdf").getEffectiveLevel() >= logging.ERROR
 
 
 def test_text_only_works_for_word_files_too_big_to_send(mock_client, small_mb):
@@ -316,7 +337,7 @@ def test_long_text_comes_in_parts(mock_client, small_mb, monkeypatch):
 def test_an_unsplittable_file_that_is_too_big_says_so(mock_client, small_mb):
     from tools.files import read_course_file
 
-    _serve(mock_client, b"z" * 5000, "application/zip", "code.zip")
+    _serve(mock_client, b"z" * 5000, "application/vnd.ms-powerpoint", "old.ppt")
     with pytest.raises(ValueError, match="can't be sent in parts.*download_course_file"):
         read_course_file("1", "2", max_size_mb=1)
 
@@ -399,3 +420,137 @@ def test_missing_media_tracks_are_an_empty_list():
     requester.request.side_effect = ResourceDoesNotExist("nope")
     with patch:
         assert client.list_media_tracks(file_id="9") == []
+
+
+# -- notebooks, zips, and images -----------------------------------------------------------------------
+def make_notebook(cells: int, output_kb: int = 0) -> bytes:
+    import json
+
+    return json.dumps({
+        "nbformat": 4, "nbformat_minor": 5, "metadata": {"kernelspec": {"name": "python3"}},
+        "cells": [
+            {"cell_type": "markdown", "metadata": {}, "source": [f"# Step {n}"]} if n % 2 else
+            {"cell_type": "code", "metadata": {}, "execution_count": n, "source": [f"print({n})"],
+             "outputs": [{"output_type": "stream", "name": "stdout", "text": [f"{n}\n"]},
+                         {"output_type": "display_data", "metadata": {},
+                          "data": {"image/png": "A" * output_kb * 1024}}]}
+            for n in range(1, cells + 1)
+        ],
+    }).encode()
+
+
+def make_zip(members: dict[str, bytes]) -> bytes:
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        for name, data in members.items():
+            archive.writestr(name, data)
+    return out.getvalue()
+
+
+def make_image(fmt: str, side: int) -> bytes:
+    from PIL import Image
+
+    mode = "RGBA" if fmt == "PNG" else "RGB"
+    image = Image.frombytes(mode, (side, side), os.urandom(side * side * len(mode)))
+    out = io.BytesIO()
+    image.save(out, fmt)
+    return out.getvalue()
+
+
+def test_notebook_text_shows_cells_and_outputs():
+    texts = file_parts.unit_texts("notebook", make_notebook(2, output_kb=1))
+    assert texts[0] == "[markdown]\n# Step 1"
+    assert texts[1].startswith("[code]\nprint(2)\n[output]\n2") and "[output: image]" in texts[1]
+
+
+def test_big_notebook_parts_are_valid_notebooks(mock_client, small_mb):
+    import json
+
+    from tools.files import read_course_file
+
+    data = make_notebook(6, output_kb=20)
+    _serve(mock_client, data, "application/octet-stream", "lab.ipynb")
+    cells = []
+    part = 1
+    while True:
+        try:
+            result = read_course_file("1", "2", max_size_mb=40, part=part)
+        except ValueError:
+            break
+        notebook = json.loads(_blob(result))
+        assert notebook["metadata"] == {"kernelspec": {"name": "python3"}} and notebook["nbformat"] == 4
+        cells += [c["source"][0] for c in notebook["cells"]]
+        part += 1
+    assert part > 2 and cells == [f"# Step {n}" if n % 2 else f"print({n})" for n in range(1, 7)]
+
+
+def test_a_zip_that_fits_comes_with_its_listing(mock_client, small_mb):
+    from tools.files import read_course_file
+
+    data = make_zip({"src/main.c": b"int main;", "__MACOSX/._main.c": b"x", "README.md": b"hi"})
+    _serve(mock_client, data, "application/zip", "lab.zip")
+    result = read_course_file("1", "2")
+    assert _blob(result) == data
+    assert "Files in lab.zip (2):\nsrc/main.c (9 bytes)\nREADME.md (2 bytes)" in _text(result)
+
+
+def test_a_zip_too_big_lists_its_files_and_text_only_reads_them(mock_client, small_mb):
+    from tools.files import read_course_file
+
+    data = make_zip({"src/main.c": b"int main;", "data.bin": os.urandom(5000), "notes.docx": make_docx(["Hello"]),
+                     "lab.ipynb": make_notebook(1)})
+    _serve(mock_client, data, "application/x-zip-compressed", "lab.zip")
+    listing = _text(read_course_file("1", "2", max_size_mb=1))
+    assert "over the 1 MB limit" in listing and "text_only=true" in listing and "data.bin (5,000 bytes)" in listing
+    text = _text(read_course_file("1", "2", max_size_mb=1, text_only=True))
+    assert "=== src/main.c ===\nint main;" in text and "=== notes.docx ===\nHello" in text
+    assert "=== lab.ipynb ===\n[markdown]" in text and "data.bin" not in text
+
+
+@pytest.mark.parametrize(("fmt", "mime"), [("JPEG", "image/jpeg"), ("PNG", "image/png")])
+def test_an_image_too_big_is_sent_resized(mock_client, small_mb, fmt, mime):
+    from PIL import Image
+
+    from tools.files import read_course_file
+
+    data = make_image(fmt, 300)
+    assert len(data) > 40 * 1024
+    _serve(mock_client, data, mime, f"photo.{fmt.lower()}")
+    result = read_course_file("1", "2", max_size_mb=40)
+    shrunk = _blob(result)
+    assert len(shrunk) <= 40 * 1024
+    assert "sent resized to" in _text(result) and "download_course_file gets the original" in _text(result)
+    resource = next(c for c in result.content if c.type == "resource")
+    assert resource.resource.mimeType == mime  # transparency keeps PNG
+    assert Image.open(io.BytesIO(shrunk)).size[0] < 300
+
+
+def test_text_only_on_a_big_image_says_images_have_no_text(mock_client, small_mb):
+    from tools.files import read_course_file
+
+    _serve(mock_client, make_image("JPEG", 300), "image/jpeg", "a.jpg")
+    with pytest.raises(ValueError, match="Can't read text from image/jpeg"):
+        read_course_file("1", "2", max_size_mb=1, text_only=True)
+
+
+def test_text_only_on_a_scanned_pdf_says_to_read_the_file(mock_client, small_mb):
+    from pypdf import PdfWriter
+
+    from tools.files import read_course_file
+
+    writer = PdfWriter()
+    for _ in range(3):
+        writer.add_blank_page(width=100, height=100)
+    out = io.BytesIO()
+    writer.write(out)
+    _serve(mock_client, out.getvalue())
+    text = _text(read_course_file("1", "2", text_only=True))
+    assert "3 of 3 pages have no text (they're probably scanned images)" in text
+
+
+def test_text_only_on_an_image_is_refused(mock_client, small_mb):
+    from tools.files import read_course_file
+
+    _serve(mock_client, make_image("JPEG", 20), "image/jpeg", "a.jpg")
+    with pytest.raises(ValueError, match="Can't read text from image/jpeg"):
+        read_course_file("1", "2", text_only=True)

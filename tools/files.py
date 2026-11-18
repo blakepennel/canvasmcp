@@ -173,6 +173,27 @@ def _text_result(name: str, kind: str, texts: list[str], part: int | None, intro
     return ToolResult(content=[TextContent(type="text", text=f"{header}\n\n{body}")])
 
 
+def _full_file(client: Any, course_id: str, file_id: str, info: dict[str, Any], name: str, size: Any) -> bytes:
+    key = _file_key(course_id, file_id, info)
+    data = _recent_files.get(key)
+    if data is None:
+        _, data = client.read_file_bytes(course_id=course_id, file_id=file_id, max_bytes=SOURCE_MAX_BYTES)
+        if data is None:
+            raise ValueError(f"{name} is {_mb(size)}, too big to read in parts here. Use download_course_file instead.")
+        _remember(key, data)
+    return data
+
+
+def _archive_listing(name: str, data: bytes) -> str:
+    try:
+        entries = file_parts.archive_listing(data)
+    except Exception:
+        return f"{name} couldn't be opened as a zip."
+    shown = entries[:300]
+    more = f"\n... and {len(entries) - len(shown)} more" if len(entries) > len(shown) else ""
+    return f"Files in {name} ({len(entries)}):\n" + "\n".join(shown) + more
+
+
 def _captions(client: Any, file_id: str, info: dict[str, Any]) -> list[str]:
     tracks = client.list_media_tracks(file_id=file_id) if info.get("media_entry_id") else []
     tracks = [t for t in tracks if (t.get("content") or "").strip()]
@@ -237,15 +258,52 @@ def read_course_file(
         )
 
     if data is not None and not text_only and part in (None, 1):
+        content = [
+            TextContent(type="text", text=f"Canvas file: {name} ({content_type}, {len(data)} bytes)."),
+            _resource(course_id, file_id, name, content_type, data),
+        ]
+        if kind == file_parts.ARCHIVE:
+            content.append(TextContent(type="text", text=_archive_listing(name, data)))
+        return ToolResult(content=content)
+
+    if kind in (file_parts.IMAGE, file_parts.ARCHIVE) and not text_only:
+        if part not in (None, 1):
+            raise ValueError(f"{name} has only 1 part.")
+        if data is None:
+            data = _full_file(client, course_id, file_id, file_info, name, size)
+        if kind == file_parts.ARCHIVE:
+            # A zip too big to send: say what's in it, and how to read its text files.
+            return ToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text=f"{name} is a {_mb(len(data))} zip, over the {max_size_mb} MB limit for one response, "
+                        f"so it isn't sent. Read its text and code files with text_only=true, or get a copy with "
+                        f"download_course_file.\n\n{_archive_listing(name, data)}",
+                    )
+                ]
+            )
+        # An image too big to send: send it resized to fit, rather than nothing.
+        try:
+            shrunk, mime, original, resized = file_parts.shrink_image(data, max_bytes)
+        except Exception as exc:
+            raise ValueError(f"{name} is {_mb(len(data))}, over the {max_size_mb} MB limit, and couldn't be resized "
+                             f"({exc}). Use download_course_file instead.") from exc
         return ToolResult(
             content=[
-                TextContent(type="text", text=f"Canvas file: {name} ({content_type}, {len(data)} bytes)."),
-                _resource(course_id, file_id, name, content_type, data),
+                TextContent(
+                    type="text",
+                    text=f"{name} is {_mb(len(data))} ({original[0]}x{original[1]}), over the {max_size_mb} MB limit, "
+                    f"so it's sent resized to {resized[0]}x{resized[1]}. download_course_file gets the original.",
+                ),
+                _resource(course_id, file_id, name, mime, shrunk),
             ]
         )
 
     can_split = kind in file_parts.SPLITTABLE
     can_read = kind in file_parts.EXTRACTABLE
+    if text_only and not can_read:
+        raise ValueError(f"Can't read text from {content_type} files; read the file itself instead.")
     if data is None and not (can_read if text_only else can_split):
         hint = " Its text can be read with text_only=true." if can_read else ""
         raise ValueError(
@@ -254,21 +312,20 @@ def read_course_file(
         )
     if not text_only and not can_split:
         raise ValueError(f"{name} fits in one response, so it has only 1 part.")
-    if text_only and not can_read:
-        raise ValueError(f"Can't read text from {content_type} files; read the file itself instead.")
     if data is None:
-        key = _file_key(course_id, file_id, file_info)
-        data = _recent_files.get(key)
-        if data is None:
-            _, data = client.read_file_bytes(course_id=course_id, file_id=file_id, max_bytes=SOURCE_MAX_BYTES)
-            if data is None:
-                raise ValueError(
-                    f"{name} is {_mb(size)}, too big to read in parts here. Use download_course_file instead."
-                )
-            _remember(key, data)
+        data = _full_file(client, course_id, file_id, file_info, name, size)
 
     if text_only:
-        return _text_result(name, kind, file_parts.unit_texts(kind, data), part, "Text of", TEXT_ONLY_NOTE)
+        # For a text file the text is the whole file, so there's nothing to warn about.
+        note = "" if kind == file_parts.TEXT else TEXT_ONLY_NOTE
+        texts = file_parts.unit_texts(kind, data)
+        blank = sum(1 for text in texts if len(text.strip()) < 20)
+        if kind == file_parts.PDF and texts and blank * 2 > len(texts):
+            note = (
+                f"{blank} of {len(texts)} pages have no text (they're probably scanned images), so read the "
+                "file itself (without text_only) instead."
+            )
+        return _text_result(name, kind, texts, part, "Text of", note)
 
     document = file_parts.open_file(kind, data)
     unit = file_parts.UNIT[kind]

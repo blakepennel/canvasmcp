@@ -8,21 +8,35 @@ same way and part numbers stay stable between calls.
 from __future__ import annotations
 
 import io
+import json
+import logging
 import re
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from xml.etree import ElementTree
 
+# pypdf logs a warning for every cross-reference it repairs in a slightly broken PDF; the pages still read fine.
+logging.getLogger("pypdf").setLevel(logging.ERROR)
+
 PDF, PPTX, DOCX, TEXT, MEDIA = "pdf", "pptx", "docx", "text", "media"
-SPLITTABLE = (PDF, PPTX, TEXT)  # kinds that can be sent in parts as real files
-EXTRACTABLE = (PDF, PPTX, DOCX, TEXT)  # kinds whose text can be read
-UNIT = {PDF: "page", PPTX: "slide", DOCX: "paragraph", TEXT: "line", MEDIA: "caption"}
+NOTEBOOK, IMAGE, ARCHIVE = "notebook", "image", "archive"
+SPLITTABLE = (PDF, PPTX, TEXT, NOTEBOOK)  # kinds that can be sent in parts as real files
+EXTRACTABLE = (PDF, PPTX, DOCX, TEXT, NOTEBOOK, ARCHIVE)  # kinds whose text can be read
+UNIT = {
+    PDF: "page", PPTX: "slide", DOCX: "paragraph", TEXT: "line", MEDIA: "caption", NOTEBOOK: "cell",
+    ARCHIVE: "file",
+}
 TEXT_EXTENSIONS = {
     "txt", "md", "csv", "tsv", "json", "xml", "html", "htm", "py", "java", "c", "h", "cpp", "hpp", "js", "ts",
-    "go", "rs", "rb", "sh", "sql", "yaml", "yml", "tex", "r", "m", "ipynb", "log",
+    "go", "rs", "rb", "sh", "sql", "yaml", "yml", "tex", "r", "m", "log", "s", "asm", "v", "sv", "vhd", "mk",
+    "cmake", "toml", "ini", "cfg", "kt", "swift", "scala", "hs", "ml", "lisp", "scm", "pl", "php", "css", "bib",
 }
-TEXT_TYPES = ("application/json", "application/xml", "application/javascript", "application/x-ipynb+json")
+TEXT_TYPES = (
+    "application/json", "application/xml", "application/javascript", "application/x-sh",
+    "application/x-shellscript", "application/x-tex",
+)
+ARCHIVE_TYPES = ("application/zip", "application/x-zip-compressed", "application/x-zip")
 
 
 def file_kind(content_type: str, name: str) -> str | None:
@@ -30,12 +44,18 @@ def file_kind(content_type: str, name: str) -> str | None:
     extension = name.rsplit(".", 1)[-1].lower() if "." in name else ""
     if content_type == "application/pdf" or extension == "pdf":
         return PDF
+    if extension == "ipynb" or content_type == "application/x-ipynb+json":
+        return NOTEBOOK
+    if content_type in ARCHIVE_TYPES or extension == "zip":
+        return ARCHIVE
     if "presentationml.presentation" in content_type or extension == "pptx":
         return PPTX
     if "wordprocessingml.document" in content_type or extension == "docx":
         return DOCX
     if content_type.startswith(("video/", "audio/")):
         return MEDIA
+    if content_type.startswith("image/") and content_type != "image/svg+xml":
+        return IMAGE
     if content_type.startswith("text/") or content_type in TEXT_TYPES or extension in TEXT_EXTENSIONS:
         return TEXT
     return None
@@ -221,13 +241,107 @@ class TextFile:
         return [line.decode("utf-8", errors="replace").rstrip("\r\n") for line in self.lines]
 
 
-def open_file(kind: str, data: bytes) -> PdfFile | PptxFile | TextFile:
-    return {PDF: PdfFile, PPTX: PptxFile, TEXT: TextFile}[kind](data)
+# -- Jupyter notebooks ---------------------------------------------------------------------------------
+class NotebookFile:
+    def __init__(self, data: bytes) -> None:
+        self.notebook = json.loads(data.decode("utf-8-sig"))
+        self.cells = list(self.notebook.get("cells") or [])
+        self.count = len(self.cells)
+
+    def build(self, first: int, last: int) -> bytes:
+        # A valid notebook with only these cells (and the original metadata).
+        return json.dumps({**self.notebook, "cells": self.cells[first - 1 : last]}, indent=1).encode()
+
+    def sizes(self) -> list[int]:
+        return [len(json.dumps(cell, indent=1)) for cell in self.cells]
+
+    def texts(self) -> list[str]:
+        out = []
+        for cell in self.cells:
+            lines = [f"[{cell.get('cell_type', 'cell')}]", _joined(cell.get("source"))]
+            for output in cell.get("outputs") or []:
+                data = output.get("data") or {}
+                text = output.get("text") or data.get("text/plain")
+                if text:
+                    lines.append("[output]\n" + _joined(text))
+                elif output.get("output_type") == "error":
+                    lines.append(f"[error] {output.get('ename')}: {output.get('evalue')}")
+                elif any(key.startswith("image/") for key in data):
+                    lines.append("[output: image]")
+            out.append("\n".join(line for line in lines if line))
+        return out
+
+
+def _joined(value) -> str:
+    return "".join(value) if isinstance(value, list) else str(value or "")
+
+
+# -- zip archives --------------------------------------------------------------------------------------
+def archive_listing(data: bytes) -> list[str]:
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        return [
+            f"{info.filename} ({info.file_size:,} bytes)"
+            for info in archive.infolist()
+            if not info.is_dir() and not _junk(info.filename)
+        ]
+
+
+def archive_texts(data: bytes, max_member_bytes: int = 2 * 1024 * 1024) -> list[str]:
+    """Each text file, notebook, or Word file inside the zip, labeled with its path."""
+    out = []
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        for info in archive.infolist():
+            if info.is_dir() or _junk(info.filename) or info.file_size > max_member_bytes:
+                continue
+            kind = file_kind("", info.filename)
+            if kind not in (TEXT, NOTEBOOK, DOCX):
+                continue
+            try:
+                body = "\n".join(unit_texts(kind, archive.read(info)))
+            except Exception:  # one unreadable member shouldn't hide the rest
+                continue
+            out.append(f"=== {info.filename} ===\n{body}")
+    return out
+
+
+def _junk(name: str) -> bool:
+    return name.startswith("__MACOSX/") or name.rsplit("/", 1)[-1] in (".DS_Store", "Thumbs.db")
+
+
+# -- images --------------------------------------------------------------------------------------------
+def shrink_image(data: bytes, budget: int) -> tuple[bytes, str, tuple[int, int], tuple[int, int]]:
+    """The image re-encoded small enough for budget: (bytes, mime type, original size, new size)."""
+    from PIL import Image
+
+    with Image.open(io.BytesIO(data)) as source:
+        source.load()
+        original = source.size
+        keep_alpha = source.mode in ("RGBA", "LA") or (source.mode == "P" and "transparency" in source.info)
+        image = source.convert("RGBA" if keep_alpha else "RGB")
+    scale = min(1.0, (budget / max(len(data), 1)) ** 0.5)
+    for _ in range(10):
+        size = (max(1, int(original[0] * scale)), max(1, int(original[1] * scale)))
+        out = io.BytesIO()
+        resized = image.resize(size, Image.LANCZOS) if size != original else image
+        if keep_alpha:
+            resized.save(out, "PNG", optimize=True)
+        else:
+            resized.save(out, "JPEG", quality=85, optimize=True)
+        if out.tell() <= budget:
+            return out.getvalue(), "image/png" if keep_alpha else "image/jpeg", original, size
+        scale *= 0.75
+    raise ValueError("couldn't make the image small enough")
+
+
+def open_file(kind: str, data: bytes) -> PdfFile | PptxFile | TextFile | NotebookFile:
+    return {PDF: PdfFile, PPTX: PptxFile, TEXT: TextFile, NOTEBOOK: NotebookFile}[kind](data)
 
 
 def unit_texts(kind: str, data: bytes) -> list[str]:
     if kind == DOCX:
         return docx_texts(data)
+    if kind == ARCHIVE:
+        return archive_texts(data)
     return open_file(kind, data).texts()
 
 
@@ -269,5 +383,7 @@ def text_parts(texts: list[str], budget: int) -> list[Part]:
 def join_texts(kind: str, texts: list[str], first: int, last: int) -> str:
     if kind in (TEXT, MEDIA, DOCX):
         return "\n".join(texts[first - 1 : last])
+    if kind == ARCHIVE:
+        return "\n\n".join(texts[first - 1 : last])
     label = UNIT[kind].capitalize()
     return "\n\n".join(f"--- {label} {n} ---\n{texts[n - 1] or '(no text)'}" for n in range(first, last + 1))
